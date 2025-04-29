@@ -1,11 +1,11 @@
 using System;
 using System.ComponentModel;
 using System.Threading.Tasks;
-using DBMCP;
 using ModelContextProtocol.Server;
+using MCPTool.Common;
 
 [McpServerToolType]
-public static class DBMCPServerTools
+public class DBMCPServerTools
 {
     // 创建DBMCP实例
     private static readonly IDBMCP _dbmcp = new PostgresDBMCP();

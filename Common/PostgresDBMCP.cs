@@ -9,7 +9,7 @@ using Npgsql;
 using SQLParser;
 using SQLParser.Parsers.TSql;
 
-namespace DBMCP
+namespace MCPTool.Common
 {
     /// <summary>
     /// PostgreSQL的DBMCP实现

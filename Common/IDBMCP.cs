@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 
-namespace DBMCP
+namespace MCPTool.Common
 {
     /// <summary>
     /// DBMCP接口定义，用于规范DB行为

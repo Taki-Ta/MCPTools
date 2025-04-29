@@ -1,2 +1,9 @@
-/bin
-/obj
+**/bin/
+**/obj/
+**/*.user
+**/.config/
+
+/DBMCP_SSE/Properties/PublishProfiles/
+
+/.vs
+/Publish

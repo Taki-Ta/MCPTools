@@ -1,7 +1,7 @@
 using System;
 using System.Threading.Tasks;
 using Xunit;
-using DBMCP;
+using MCPTool.Common;
 
 namespace DBMCPTests
 {

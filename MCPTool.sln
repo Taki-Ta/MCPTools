@@ -1,0 +1,37 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.10.35027.167
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "DBMCP", "DBMCP\DBMCP.csproj", "{AF551ACE-7020-4204-9082-19DDF39C23D6}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Common", "Common\Common.csproj", "{57AC3CE7-888A-4AB8-99F7-8D111C9A3F3F}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DBMCP_SSE", "DBMCP_SSE\DBMCP_SSE.csproj", "{2C6E6106-64B0-4B95-BE08-26643D8A829B}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{AF551ACE-7020-4204-9082-19DDF39C23D6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{AF551ACE-7020-4204-9082-19DDF39C23D6}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{AF551ACE-7020-4204-9082-19DDF39C23D6}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{AF551ACE-7020-4204-9082-19DDF39C23D6}.Release|Any CPU.Build.0 = Release|Any CPU
+		{57AC3CE7-888A-4AB8-99F7-8D111C9A3F3F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{57AC3CE7-888A-4AB8-99F7-8D111C9A3F3F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{57AC3CE7-888A-4AB8-99F7-8D111C9A3F3F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{57AC3CE7-888A-4AB8-99F7-8D111C9A3F3F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{2C6E6106-64B0-4B95-BE08-26643D8A829B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2C6E6106-64B0-4B95-BE08-26643D8A829B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2C6E6106-64B0-4B95-BE08-26643D8A829B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2C6E6106-64B0-4B95-BE08-26643D8A829B}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {EF6A470C-D0E4-4725-85A8-80FF93211CDC}
+	EndGlobalSection
+EndGlobal

@@ -66,10 +66,14 @@ dotnet run
 ```json
 {
     "servers": {
-        "dbmcp": {
+        "dbmcp-stdio": {
             "type": "stdio",
             "command": "dotnet",
             "args": ["run", "--project", "path/to/dbmcp", "--no-build"]
+        },
+        "dbmcp-sse": {
+            "type": "sse",
+            "url": "http://127.0.0.1:5000/sse"
         }
     }
 }
