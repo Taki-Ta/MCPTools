@@ -1,6 +1,6 @@
-# DBMCP
+# MCPTool
 
-DBMCP 是一个 C#编写的操作数据库的 MCP(Model Context Protocol)实现。
+MCPTool 是一个 C#编写的操作数据库的 MCP(Model Context Protocol)实现。
 
 ## 项目结构
 
@@ -50,13 +50,6 @@ dotnet run
 
 ```bash
 dotnet test
-```
-
-### 客户端
-
-```bash
-cd client
-dotnet run
 ```
 
 ## 使用示例
