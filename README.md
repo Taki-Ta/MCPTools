@@ -1,18 +1,23 @@
 # MCPTool
 
 MCPTool 是一个 C#编写的操作数据库的 MCP(Model Context Protocol)实现。
+现支持Postgres和MongoDB数据库。
 
 ## 项目结构
 
--   `IDBMCP.cs` - DBMCP 接口定义
--   `PostgresDBMCP.cs` - PostgreSQL 的 DBMCP 实现
--   `DBMCPServerTools.cs` - 使用 MCP 工具包装 DBMCP 功能
--   `Program.cs` - 主程序，启动 MCP 服务器
--   `DBMCPTests.cs` - 测试类，测试主要功能
+-   `Common/interface/IPostgreSQL.cs` - PostgreSQL接口定义
+-   `Common/interface/IMongoDB.cs` - MongoDB接口定义
+-   `Common/provider/PostgreSQLProvider.cs` - PostgreSQL的实现
+-   `Common/provider/MongoDBProvider.cs` - MongoDB的实现
+-   `Common/DBServerTools.cs` - 使用MCP工具包装数据库操作功能
+-   `DBMCP/Program.cs` - Standard IO通信模式的MCP服务器
+-   `DBMCP_SSE/Program.cs` - SSE通信模式的MCP服务器
 
 ## 功能
 
 实现了以下数据库操作功能：
+
+### PostgreSQL 功能
 
 1. 注册/注销数据库连接
 2. 查询(SELECT)
@@ -26,11 +31,24 @@ MCPTool 是一个 C#编写的操作数据库的 MCP(Model Context Protocol)实�
 10. 创建类型
 11. 创建 Schema
 
+### MongoDB 功能
+
+1. 注册/注销数据库连接
+2. 查询文档(Find)
+3. 插入单个/多个文档(InsertOne/InsertMany)
+4. 更新文档(UpdateMany)
+5. 删除文档(DeleteMany)
+6. 创建/删除集合
+7. 创建/删除索引
+8. 列出集合
+9. 获取集合详情
+
 ## 依赖项
 
 -   .NET 7.0
 -   ModelContextProtocol v0.1.0-preview.11
 -   Npgsql v9.0.3
+-   MongoDB.Driver v2.24.0
 -   SQLParser v3.0.22
 -   xUnit (用于测试)
 
@@ -38,11 +56,25 @@ MCPTool 是一个 C#编写的操作数据库的 MCP(Model Context Protocol)实�
 
 ### 服务器
 
+#### Standard IO模式
+
 ```bash
 # 编译
 dotnet build
 
 # 运行
+cd DBMCP
+dotnet run
+```
+
+#### SSE模式
+
+```bash
+# 编译
+dotnet build
+
+# 运行
+cd DBMCP_SSE
 dotnet run
 ```
 
@@ -62,7 +94,7 @@ dotnet test
         "dbmcp-stdio": {
             "type": "stdio",
             "command": "dotnet",
-            "args": ["run", "--project", "path/to/dbmcp", "--no-build"]
+            "args": ["run", "--project", "path/to/DBMCP", "--no-build"]
         },
         "dbmcp-sse": {
             "type": "sse",
@@ -74,6 +106,7 @@ dotnet test
 
 ## 注意事项
 
--   连接字符串中需要正确配置 PostgreSQL 的连接信息
--   客户端测试默认连接到本地 PostgreSQL(localhost:5432)
+-   连接字符串中需要正确配置 PostgreSQL 或 MongoDB 的连接信息
+-   客户端测试默认连接到本地数据库服务器(localhost)
 -   需要确保测试数据库存在并且有访问权限
+-   MongoDB 文档操作使用标准 JSON 格式
