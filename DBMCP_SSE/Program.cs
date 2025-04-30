@@ -20,10 +20,6 @@ builder.Services.AddMcpServer()
     .WithToolsFromAssembly()
     .WithTools<DBServerTools>();
 
-// 注册PostgreSQL和MongoDB实现
-builder.Services.AddSingleton<IPostgreSQL, PostgreSQLProvider>();
-builder.Services.AddSingleton<IMongoDB, MongoDBProvider>();
-
 // 设置监听所有IP地址
 builder.WebHost.UseUrls("http://0.0.0.0:5000");
 
