@@ -1,14 +1,15 @@
 # MCPTool
 
 MCPTool 是一个 C#编写的操作数据库的 MCP(Model Context Protocol)实现。
-现支持Postgres和MongoDB数据库。
+现支持Postgres、MongoDB和MSSQL数据库。
 
 ## 项目结构
 
--   `Common/interface/IPostgreSQL.cs` - PostgreSQL接口定义
+-   `Common/interface/IRelationalDB.cs` - 关系型数据库接口定义
 -   `Common/interface/IMongoDB.cs` - MongoDB接口定义
 -   `Common/provider/PostgreSQLProvider.cs` - PostgreSQL的实现
 -   `Common/provider/MongoDBProvider.cs` - MongoDB的实现
+-   `Common/provider/MSSQLProvider.cs` - MSSQL的实现
 -   `Common/DBServerTools.cs` - 使用MCP工具包装数据库操作功能
 -   `DBMCP/Program.cs` - Standard IO通信模式的MCP服务器
 -   `DBMCP_SSE/Program.cs` - SSE通信模式的MCP服务器
@@ -17,7 +18,7 @@ MCPTool 是一个 C#编写的操作数据库的 MCP(Model Context Protocol)实�
 
 实现了以下数据库操作功能：
 
-### PostgreSQL 功能
+### 关系型数据库功能 (PostgreSQL & MSSQL)
 
 1. 注册/注销数据库连接
 2. 查询(SELECT)
@@ -49,6 +50,7 @@ MCPTool 是一个 C#编写的操作数据库的 MCP(Model Context Protocol)实�
 -   ModelContextProtocol v0.1.0-preview.11
 -   Npgsql v9.0.3
 -   MongoDB.Driver v2.24.0
+-   System.Data.SqlClient v4.9.0
 -   SQLParser v3.0.22
 -   xUnit (用于测试)
 
@@ -106,7 +108,7 @@ dotnet test
 
 ## 注意事项
 
--   连接字符串中需要正确配置 PostgreSQL 或 MongoDB 的连接信息
+-   连接字符串中需要正确配置 PostgreSQL、MSSQL 或 MongoDB 的连接信息
 -   客户端测试默认连接到本地数据库服务器(localhost)
 -   需要确保测试数据库存在并且有访问权限
 -   MongoDB 文档操作使用标准 JSON 格式

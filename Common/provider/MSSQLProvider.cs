@@ -2,23 +2,21 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Data;
+using System.Data.SqlClient;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
-using Npgsql;
-using SQLParser;
-using SQLParser.Parsers.TSql;
 using Common.@interface;
 using Common.config;
 
 namespace Common.provider
 {
     /// <summary>
-    /// PostgreSQL的关系型数据库实现
+    /// MSSQL的关系型数据库实现
     /// </summary>
-    public class PostgreSQLProvider : IRelationalDB
+    public class MSSQLProvider : IRelationalDB
     {
-        private readonly ConcurrentDictionary<string, NpgsqlDataSource> _connections = new();
+        private readonly ConcurrentDictionary<string, string> _connections = new();
 
         /// <summary>
         /// 注册新的数据库连接，使用配置文件中的连接字符串
@@ -26,10 +24,10 @@ namespace Common.provider
         /// <returns>连接ID</returns>
         public async Task<string> Register()
         {
-            string connStr = DatabaseConfig.Instance.GetConnectionString(DatabaseType.PostgreSQL);
+            string connStr = DatabaseConfig.Instance.GetConnectionString(DatabaseType.MSSQL);
             if (string.IsNullOrEmpty(connStr))
             {
-                throw new Exception("PostgreSQL连接字符串未配置");
+                throw new Exception("MSSQL连接字符串未配置");
             }
             return await Register(connStr);
         }
@@ -44,19 +42,18 @@ namespace Common.provider
             try
             {
                 var connId = Guid.NewGuid().ToString();
-                var dataSourceBuilder = new NpgsqlDataSourceBuilder(connStr);
-                var dataSource = dataSourceBuilder.Build();
-
+                
                 // 测试连接是否有效
-                using (var conn = await dataSource.OpenConnectionAsync())
+                using (var connection = new SqlConnection(connStr))
                 {
-                    if (conn.State != ConnectionState.Open)
+                    await connection.OpenAsync();
+                    if (connection.State != ConnectionState.Open)
                     {
                         throw new Exception("无法建立连接");
                     }
                 }
 
-                _connections[connId] = dataSource;
+                _connections[connId] = connStr;
                 return connId;
             }
             catch (Exception ex)
@@ -70,14 +67,10 @@ namespace Common.provider
         /// </summary>
         /// <param name="connId">连接ID</param>
         /// <returns>操作是否成功</returns>
-        public async Task<bool> Unregister(string connId)
+        public Task<bool> Unregister(string connId)
         {
-            if (_connections.TryRemove(connId, out var dataSource))
-            {
-                await dataSource.DisposeAsync();
-                return true;
-            }
-            return false;
+            var result = _connections.TryRemove(connId, out _);
+            return Task.FromResult(result);
         }
 
         /// <summary>
@@ -90,13 +83,14 @@ namespace Common.provider
         {
             ValidateSqlType(querySql, "SELECT");
 
-            if (!_connections.TryGetValue(connId, out var dataSource))
+            if (!_connections.TryGetValue(connId, out var connStr))
             {
                 throw new Exception($"连接ID {connId} 不存在");
             }
 
-            using var connection = await dataSource.OpenConnectionAsync();
-            using var command = new NpgsqlCommand(querySql, connection);
+            using var connection = new SqlConnection(connStr);
+            await connection.OpenAsync();
+            using var command = new SqlCommand(querySql, connection);
             using var reader = await command.ExecuteReaderAsync();
 
             return await FormatQueryResult(reader);
@@ -112,13 +106,14 @@ namespace Common.provider
         {
             ValidateSqlType(insertSql, "INSERT");
 
-            if (!_connections.TryGetValue(connId, out var dataSource))
+            if (!_connections.TryGetValue(connId, out var connStr))
             {
                 throw new Exception($"连接ID {connId} 不存在");
             }
 
-            using var connection = await dataSource.OpenConnectionAsync();
-            using var command = new NpgsqlCommand(insertSql, connection);
+            using var connection = new SqlConnection(connStr);
+            await connection.OpenAsync();
+            using var command = new SqlCommand(insertSql, connection);
             int rowsAffected = await command.ExecuteNonQueryAsync();
 
             return $"已插入 {rowsAffected} 行";
@@ -134,13 +129,14 @@ namespace Common.provider
         {
             ValidateSqlType(updateSql, "UPDATE");
 
-            if (!_connections.TryGetValue(connId, out var dataSource))
+            if (!_connections.TryGetValue(connId, out var connStr))
             {
                 throw new Exception($"连接ID {connId} 不存在");
             }
 
-            using var connection = await dataSource.OpenConnectionAsync();
-            using var command = new NpgsqlCommand(updateSql, connection);
+            using var connection = new SqlConnection(connStr);
+            await connection.OpenAsync();
+            using var command = new SqlCommand(updateSql, connection);
             int rowsAffected = await command.ExecuteNonQueryAsync();
 
             return $"已更新 {rowsAffected} 行";
@@ -156,13 +152,14 @@ namespace Common.provider
         {
             ValidateSqlType(deleteSql, "DELETE");
 
-            if (!_connections.TryGetValue(connId, out var dataSource))
+            if (!_connections.TryGetValue(connId, out var connStr))
             {
                 throw new Exception($"连接ID {connId} 不存在");
             }
 
-            using var connection = await dataSource.OpenConnectionAsync();
-            using var command = new NpgsqlCommand(deleteSql, connection);
+            using var connection = new SqlConnection(connStr);
+            await connection.OpenAsync();
+            using var command = new SqlCommand(deleteSql, connection);
             int rowsAffected = await command.ExecuteNonQueryAsync();
 
             return $"已删除 {rowsAffected} 行";
@@ -176,13 +173,13 @@ namespace Common.provider
         /// <returns>表结构描述</returns>
         public async Task<string> Describe(string connId, string tableName)
         {
-            if (!_connections.TryGetValue(connId, out var dataSource))
+            if (!_connections.TryGetValue(connId, out var connStr))
             {
                 throw new Exception($"连接ID {connId} 不存在");
             }
 
             // 解析表名，处理schema.tableName格式
-            string schemaName = "public";
+            string schemaName = "dbo";
             string tableNameOnly = tableName;
             if (tableName.Contains('.'))
             {
@@ -193,23 +190,30 @@ namespace Common.provider
 
             string sql = @"
 SELECT 
-    column_name, 
-    data_type, 
-    character_maximum_length, 
-    column_default, 
-    is_nullable
+    c.name AS column_name, 
+    t.name AS data_type,
+    c.max_length AS character_maximum_length,
+    OBJECT_DEFINITION(c.default_object_id) AS column_default,
+    CASE WHEN c.is_nullable = 1 THEN 'YES' ELSE 'NO' END AS is_nullable
 FROM 
-    information_schema.columns
+    sys.columns c
+INNER JOIN 
+    sys.types t ON c.user_type_id = t.user_type_id
+INNER JOIN 
+    sys.tables tbl ON c.object_id = tbl.object_id
+INNER JOIN 
+    sys.schemas s ON tbl.schema_id = s.schema_id
 WHERE 
-    table_schema = @schema AND 
-    table_name = @table
+    s.name = @schema AND 
+    tbl.name = @table
 ORDER BY 
-    ordinal_position;";
+    c.column_id;";
 
-            using var connection = await dataSource.OpenConnectionAsync();
-            using var command = new NpgsqlCommand(sql, connection);
-            command.Parameters.AddWithValue("schema", schemaName);
-            command.Parameters.AddWithValue("table", tableNameOnly);
+            using var connection = new SqlConnection(connStr);
+            await connection.OpenAsync();
+            using var command = new SqlCommand(sql, connection);
+            command.Parameters.AddWithValue("@schema", schemaName);
+            command.Parameters.AddWithValue("@table", tableNameOnly);
 
             using var reader = await command.ExecuteReaderAsync();
             return await FormatQueryResult(reader);
@@ -225,24 +229,17 @@ ORDER BY
         {
             ValidateSqlType(createSql, "CREATE TABLE");
 
-            if (!_connections.TryGetValue(connId, out var dataSource))
+            if (!_connections.TryGetValue(connId, out var connStr))
             {
                 throw new Exception($"连接ID {connId} 不存在");
             }
 
-            try
-            {
-                using var connection = await dataSource.OpenConnectionAsync();
-                using var command = new NpgsqlCommand(createSql, connection);
-                await command.ExecuteNonQueryAsync();
+            using var connection = new SqlConnection(connStr);
+            await connection.OpenAsync();
+            using var command = new SqlCommand(createSql, connection);
+            await command.ExecuteNonQueryAsync();
 
-                return "表创建成功";
-            }
-            catch (PostgresException ex) when (ex.SqlState == "42P07") // 42P07 是"表已存在"的错误代码
-            {
-                // 表已存在，视为成功
-                return "表创建成功（表已存在）";
-            }
+            return "表创建成功";
         }
 
         /// <summary>
@@ -253,14 +250,16 @@ ORDER BY
         /// <returns>删除结果</returns>
         public async Task<string> DropTable(string connId, string tableName)
         {
-            if (!_connections.TryGetValue(connId, out var dataSource))
+            if (!_connections.TryGetValue(connId, out var connStr))
             {
                 throw new Exception($"连接ID {connId} 不存在");
             }
 
-            string sql = $"DROP TABLE IF EXISTS {tableName};";
-            using var connection = await dataSource.OpenConnectionAsync();
-            using var command = new NpgsqlCommand(sql, connection);
+            string sql = $"DROP TABLE {tableName};";
+
+            using var connection = new SqlConnection(connStr);
+            await connection.OpenAsync();
+            using var command = new SqlCommand(sql, connection);
             await command.ExecuteNonQueryAsync();
 
             return "表删除成功";
@@ -276,24 +275,17 @@ ORDER BY
         {
             ValidateSqlType(createIndexSql, "CREATE INDEX");
 
-            if (!_connections.TryGetValue(connId, out var dataSource))
+            if (!_connections.TryGetValue(connId, out var connStr))
             {
                 throw new Exception($"连接ID {connId} 不存在");
             }
 
-            try
-            {
-                using var connection = await dataSource.OpenConnectionAsync();
-                using var command = new NpgsqlCommand(createIndexSql, connection);
-                await command.ExecuteNonQueryAsync();
+            using var connection = new SqlConnection(connStr);
+            await connection.OpenAsync();
+            using var command = new SqlCommand(createIndexSql, connection);
+            await command.ExecuteNonQueryAsync();
 
-                return "索引创建成功";
-            }
-            catch (PostgresException ex) when (ex.SqlState == "42P07") // 索引已存在
-            {
-                // 索引已存在，视为成功
-                return "索引创建成功（索引已存在）";
-            }
+            return "索引创建成功";
         }
 
         /// <summary>
@@ -304,14 +296,22 @@ ORDER BY
         /// <returns>删除结果</returns>
         public async Task<string> DropIndex(string connId, string indexName)
         {
-            if (!_connections.TryGetValue(connId, out var dataSource))
+            if (!_connections.TryGetValue(connId, out var connStr))
             {
                 throw new Exception($"连接ID {connId} 不存在");
             }
 
-            string sql = $"DROP INDEX IF EXISTS {indexName};";
-            using var connection = await dataSource.OpenConnectionAsync();
-            using var command = new NpgsqlCommand(sql, connection);
+            // 索引名应该包含表名，例如：表名.索引名
+            if (!indexName.Contains('.'))
+            {
+                throw new Exception("索引名格式不正确，应为：表名.索引名");
+            }
+
+            string sql = $"DROP INDEX {indexName};";
+
+            using var connection = new SqlConnection(connStr);
+            await connection.OpenAsync();
+            using var command = new SqlCommand(sql, connection);
             await command.ExecuteNonQueryAsync();
 
             return "索引删除成功";
@@ -325,25 +325,28 @@ ORDER BY
         /// <returns>表列表</returns>
         public async Task<string> ListTables(string connId, string schema)
         {
-            if (!_connections.TryGetValue(connId, out var dataSource))
+            if (!_connections.TryGetValue(connId, out var connStr))
             {
                 throw new Exception($"连接ID {connId} 不存在");
             }
 
             string sql = @"
 SELECT 
-    table_name 
+    t.name AS table_name,
+    s.name AS schema_name
 FROM 
-    information_schema.tables 
+    sys.tables t
+INNER JOIN 
+    sys.schemas s ON t.schema_id = s.schema_id
 WHERE 
-    table_schema = @schema 
-    AND table_type = 'BASE TABLE'
+    s.name = @schema
 ORDER BY 
-    table_name;";
+    t.name;";
 
-            using var connection = await dataSource.OpenConnectionAsync();
-            using var command = new NpgsqlCommand(sql, connection);
-            command.Parameters.AddWithValue("schema", schema);
+            using var connection = new SqlConnection(connStr);
+            await connection.OpenAsync();
+            using var command = new SqlCommand(sql, connection);
+            command.Parameters.AddWithValue("@schema", schema);
 
             using var reader = await command.ExecuteReaderAsync();
             return await FormatQueryResult(reader);
@@ -359,13 +362,14 @@ ORDER BY
         {
             ValidateSqlType(createTypeSql, "CREATE TYPE");
 
-            if (!_connections.TryGetValue(connId, out var dataSource))
+            if (!_connections.TryGetValue(connId, out var connStr))
             {
                 throw new Exception($"连接ID {connId} 不存在");
             }
 
-            using var connection = await dataSource.OpenConnectionAsync();
-            using var command = new NpgsqlCommand(createTypeSql, connection);
+            using var connection = new SqlConnection(connStr);
+            await connection.OpenAsync();
+            using var command = new SqlCommand(createTypeSql, connection);
             await command.ExecuteNonQueryAsync();
 
             return "类型创建成功";
@@ -379,17 +383,19 @@ ORDER BY
         /// <returns>创建结果</returns>
         public async Task<string> CreateSchema(string connId, string schemaName)
         {
-            if (!_connections.TryGetValue(connId, out var dataSource))
+            if (!_connections.TryGetValue(connId, out var connStr))
             {
                 throw new Exception($"连接ID {connId} 不存在");
             }
 
-            string sql = $"CREATE SCHEMA IF NOT EXISTS {schemaName};";
-            using var connection = await dataSource.OpenConnectionAsync();
-            using var command = new NpgsqlCommand(sql, connection);
+            string sql = $"CREATE SCHEMA {schemaName};";
+
+            using var connection = new SqlConnection(connStr);
+            await connection.OpenAsync();
+            using var command = new SqlCommand(sql, connection);
             await command.ExecuteNonQueryAsync();
 
-            return "Schema创建成功";
+            return $"Schema {schemaName} 创建成功";
         }
 
         /// <summary>
@@ -400,7 +406,7 @@ ORDER BY
         /// <returns>删除结果</returns>
         public async Task<string> DropSchema(string connId, string schemaName)
         {
-            if (!_connections.TryGetValue(connId, out var dataSource))
+            if (!_connections.TryGetValue(connId, out var connStr))
             {
                 throw new Exception($"连接ID {connId} 不存在");
             }
@@ -408,13 +414,21 @@ ORDER BY
             // 如果输入是完整的DROP SCHEMA语句，则直接执行
             string sql = schemaName.Trim().ToUpper().StartsWith("DROP SCHEMA") 
                 ? schemaName 
-                : $"DROP SCHEMA IF EXISTS {schemaName};";
+                : $"DROP SCHEMA {schemaName};";
 
-            using var connection = await dataSource.OpenConnectionAsync();
-            using var command = new NpgsqlCommand(sql, connection);
-            await command.ExecuteNonQueryAsync();
+            try 
+            {
+                using var connection = new SqlConnection(connStr);
+                await connection.OpenAsync();
+                using var command = new SqlCommand(sql, connection);
+                await command.ExecuteNonQueryAsync();
 
-            return "Schema删除成功";
+                return $"Schema {schemaName} 删除成功";
+            }
+            catch (SqlException ex) when (ex.Number == 3701) // 对象不存在
+            {
+                return $"Schema {schemaName} 已删除或不存在";
+            }
         }
 
         /// <summary>
@@ -425,7 +439,7 @@ ORDER BY
         /// <returns>删除结果</returns>
         public async Task<string> DropType(string connId, string typeName)
         {
-            if (!_connections.TryGetValue(connId, out var dataSource))
+            if (!_connections.TryGetValue(connId, out var connStr))
             {
                 throw new Exception($"连接ID {connId} 不存在");
             }
@@ -433,59 +447,62 @@ ORDER BY
             // 如果输入是完整的DROP TYPE语句，则直接执行
             string sql = typeName.Trim().ToUpper().StartsWith("DROP TYPE") 
                 ? typeName 
-                : $"DROP TYPE IF EXISTS {typeName};";
+                : $"DROP TYPE {typeName};";
 
-            using var connection = await dataSource.OpenConnectionAsync();
-            using var command = new NpgsqlCommand(sql, connection);
-            await command.ExecuteNonQueryAsync();
+            try 
+            {
+                using var connection = new SqlConnection(connStr);
+                await connection.OpenAsync();
+                using var command = new SqlCommand(sql, connection);
+                await command.ExecuteNonQueryAsync();
 
-            return "类型删除成功";
+                return $"类型 {typeName} 删除成功";
+            }
+            catch (SqlException ex) when (ex.Number == 3701) // 对象不存在
+            {
+                return $"类型 {typeName} 已删除或不存在";
+            }
         }
 
         /// <summary>
         /// 验证SQL类型
         /// </summary>
         /// <param name="sql">SQL语句</param>
-        /// <param name="expectedType">期望的SQL类型</param>
+        /// <param name="expectedType">期望的类型</param>
         private void ValidateSqlType(string sql, string expectedType)
         {
             try
             {
-                bool isValid = false;
-
-                // 使用SQLParser库验证SQL类型
-                if (expectedType == "SELECT")
+                // 简单验证SQL语句类型
+                string trimmedSql = sql.Trim().ToUpper();
+                
+                if (expectedType == "SELECT" && !IsSelectStatement(trimmedSql))
                 {
-                    isValid = IsSelectStatement(sql);
+                    throw new Exception("不是有效的SELECT语句");
                 }
-                else if (expectedType == "INSERT")
+                else if (expectedType == "INSERT" && !IsInsertStatement(trimmedSql))
                 {
-                    isValid = IsInsertStatement(sql);
+                    throw new Exception("不是有效的INSERT语句");
                 }
-                else if (expectedType == "UPDATE")
+                else if (expectedType == "UPDATE" && !IsUpdateStatement(trimmedSql))
                 {
-                    isValid = IsUpdateStatement(sql);
+                    throw new Exception("不是有效的UPDATE语句");
                 }
-                else if (expectedType == "DELETE")
+                else if (expectedType == "DELETE" && !IsDeleteStatement(trimmedSql))
                 {
-                    isValid = IsDeleteStatement(sql);
+                    throw new Exception("不是有效的DELETE语句");
                 }
-                else if (expectedType == "CREATE TABLE")
+                else if (expectedType == "CREATE TABLE" && !IsCreateTableStatement(trimmedSql))
                 {
-                    isValid = IsCreateTableStatement(sql);
+                    throw new Exception("不是有效的CREATE TABLE语句");
                 }
-                else if (expectedType == "CREATE INDEX")
+                else if (expectedType == "CREATE INDEX" && !IsCreateIndexStatement(trimmedSql))
                 {
-                    isValid = IsCreateIndexStatement(sql);
+                    throw new Exception("不是有效的CREATE INDEX语句");
                 }
-                else if (expectedType == "CREATE TYPE")
+                else if (expectedType == "CREATE TYPE" && !IsCreateTypeStatement(trimmedSql))
                 {
-                    isValid = IsCreateTypeStatement(sql);
-                }
-
-                if (!isValid)
-                {
-                    throw new Exception($"无效的{expectedType}语句");
+                    throw new Exception("不是有效的CREATE TYPE语句");
                 }
             }
             catch (Exception ex)
@@ -495,171 +512,122 @@ ORDER BY
         }
 
         /// <summary>
-        /// 检查是否是SELECT语句
+        /// 判断SQL是否为SELECT语句
         /// </summary>
+        /// <param name="sql">SQL语句</param>
+        /// <returns>是否为SELECT语句</returns>
         private bool IsSelectStatement(string sql)
         {
-            var listener = new SqlStatementTypeValidator();
-            Parser.Parse(sql, listener, SQLParser.Enums.SQLType.TSql);
-            return listener.IsSelectStatement;
+            return sql.StartsWith("SELECT");
         }
 
         /// <summary>
-        /// 检查是否是INSERT语句
+        /// 判断SQL是否为INSERT语句
         /// </summary>
+        /// <param name="sql">SQL语句</param>
+        /// <returns>是否为INSERT语句</returns>
         private bool IsInsertStatement(string sql)
         {
-            var listener = new SqlStatementTypeValidator();
-            Parser.Parse(sql, listener, SQLParser.Enums.SQLType.TSql);
-            return listener.IsInsertStatement;
+            return sql.StartsWith("INSERT");
         }
 
         /// <summary>
-        /// 检查是否是UPDATE语句
+        /// 判断SQL是否为UPDATE语句
         /// </summary>
+        /// <param name="sql">SQL语句</param>
+        /// <returns>是否为UPDATE语句</returns>
         private bool IsUpdateStatement(string sql)
         {
-            var listener = new SqlStatementTypeValidator();
-            Parser.Parse(sql, listener, SQLParser.Enums.SQLType.TSql);
-            return listener.IsUpdateStatement;
+            return sql.StartsWith("UPDATE");
         }
 
         /// <summary>
-        /// 检查是否是DELETE语句
+        /// 判断SQL是否为DELETE语句
         /// </summary>
+        /// <param name="sql">SQL语句</param>
+        /// <returns>是否为DELETE语句</returns>
         private bool IsDeleteStatement(string sql)
         {
-            var listener = new SqlStatementTypeValidator();
-            Parser.Parse(sql, listener, SQLParser.Enums.SQLType.TSql);
-            return listener.IsDeleteStatement;
+            return sql.StartsWith("DELETE");
         }
 
         /// <summary>
-        /// 检查是否是CREATE TABLE语句
+        /// 判断SQL是否为CREATE TABLE语句
         /// </summary>
+        /// <param name="sql">SQL语句</param>
+        /// <returns>是否为CREATE TABLE语句</returns>
         private bool IsCreateTableStatement(string sql)
         {
-            var listener = new SqlStatementTypeValidator();
-            Parser.Parse(sql, listener, SQLParser.Enums.SQLType.TSql);
-            return listener.IsCreateTableStatement;
+            return sql.StartsWith("CREATE TABLE");
         }
 
         /// <summary>
-        /// 检查是否是CREATE INDEX语句
+        /// 判断SQL是否为CREATE INDEX语句
         /// </summary>
+        /// <param name="sql">SQL语句</param>
+        /// <returns>是否为CREATE INDEX语句</returns>
         private bool IsCreateIndexStatement(string sql)
         {
-            var listener = new SqlStatementTypeValidator();
-            Parser.Parse(sql, listener, SQLParser.Enums.SQLType.TSql);
-            return listener.IsCreateIndexStatement;
+            return sql.StartsWith("CREATE INDEX") || 
+                   sql.StartsWith("CREATE UNIQUE INDEX");
         }
 
         /// <summary>
-        /// 检查是否是CREATE TYPE语句
+        /// 判断SQL是否为CREATE TYPE语句
         /// </summary>
+        /// <param name="sql">SQL语句</param>
+        /// <returns>是否为CREATE TYPE语句</returns>
         private bool IsCreateTypeStatement(string sql)
         {
-            var listener = new SqlStatementTypeValidator();
-            Parser.Parse(sql, listener, SQLParser.Enums.SQLType.TSql);
-            return listener.IsCreateTypeStatement;
+            return sql.StartsWith("CREATE TYPE");
         }
 
         /// <summary>
         /// 格式化查询结果
         /// </summary>
-        private async Task<string> FormatQueryResult(NpgsqlDataReader reader)
+        /// <param name="reader">数据读取器</param>
+        /// <returns>格式化后的查询结果</returns>
+        private async Task<string> FormatQueryResult(SqlDataReader reader)
         {
-            var result = new StringBuilder();
+            if (!reader.HasRows)
+            {
+                return "查询没有结果";
+            }
 
-            // 获取列名
             var columns = new List<string>();
             for (int i = 0; i < reader.FieldCount; i++)
             {
                 columns.Add(reader.GetName(i));
             }
 
-            // 添加表头
-            result.AppendLine(string.Join("\t", columns));
+            // 使用StringBuilder构建结果
+            var sb = new StringBuilder();
+            var rows = new List<Dictionary<string, object>>();
 
-            // 添加分隔线
-            result.AppendLine(new string('-', columns.Sum(c => c.Length) + columns.Count * 3));
-
-            // 添加数据行
-            var rows = new List<List<string>>();
             while (await reader.ReadAsync())
             {
-                var row = new List<string>();
+                var row = new Dictionary<string, object>();
                 for (int i = 0; i < reader.FieldCount; i++)
                 {
-                    row.Add(reader.IsDBNull(i) ? "NULL" : reader.GetValue(i).ToString() ?? "NULL");
+                    string columnName = reader.GetName(i);
+                    object value = reader.GetValue(i);
+                    
+                    // 处理NULL值
+                    if (value == DBNull.Value)
+                    {
+                        value = null;
+                    }
+                    
+                    row[columnName] = value;
                 }
                 rows.Add(row);
             }
 
-            foreach (var row in rows)
+            // 将结果转换为JSON并返回
+            return JsonSerializer.Serialize(rows, new JsonSerializerOptions
             {
-                result.AppendLine(string.Join("\t", row));
-            }
-
-            result.AppendLine($"查询返回 {rows.Count} 行");
-
-            return result.ToString();
+                WriteIndented = true
+            });
         }
     }
-
-    /// <summary>
-    /// SQL语句类型验证器
-    /// </summary>
-    internal class SqlStatementTypeValidator : TSqlParserBaseListener
-    {
-        public bool IsSelectStatement { get; private set; }
-        public bool IsInsertStatement { get; private set; }
-        public bool IsUpdateStatement { get; private set; }
-        public bool IsDeleteStatement { get; private set; }
-        public bool IsCreateTableStatement { get; private set; }
-        public bool IsCreateIndexStatement { get; private set; }
-        public bool IsCreateTypeStatement { get; private set; }
-
-        public override void EnterSelect_statement(TSqlParser.Select_statementContext context)
-        {
-            IsSelectStatement = true;
-            base.EnterSelect_statement(context);
-        }
-
-        public override void EnterInsert_statement(TSqlParser.Insert_statementContext context)
-        {
-            IsInsertStatement = true;
-            base.EnterInsert_statement(context);
-        }
-
-        public override void EnterUpdate_statement(TSqlParser.Update_statementContext context)
-        {
-            IsUpdateStatement = true;
-            base.EnterUpdate_statement(context);
-        }
-
-        public override void EnterDelete_statement(TSqlParser.Delete_statementContext context)
-        {
-            IsDeleteStatement = true;
-            base.EnterDelete_statement(context);
-        }
-
-        public override void EnterCreate_table(TSqlParser.Create_tableContext context)
-        {
-            IsCreateTableStatement = true;
-            base.EnterCreate_table(context);
-        }
-
-        public override void EnterCreate_index(TSqlParser.Create_indexContext context)
-        {
-            IsCreateIndexStatement = true;
-            base.EnterCreate_index(context);
-        }
-
-        public override void EnterCreate_type(TSqlParser.Create_typeContext context)
-        {
-            IsCreateTypeStatement = true;
-            base.EnterCreate_type(context);
-        }
-    }
-}
+} 

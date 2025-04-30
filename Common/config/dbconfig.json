@@ -1,0 +1,5 @@
+{
+  "PostgreSQLConnectionString": "Host=localhost;Port=5432;Database=testdb;Username=postgres;Password=postgres;",
+  "MSSQLConnectionString": "Server=localhost;Database=testdb;User Id=sa;Password=YourPassword123;TrustServerCertificate=True;",
+  "MongoDBConnectionString": "mongodb://localhost:27017/?retryWrites=true&w=majority"
+} 

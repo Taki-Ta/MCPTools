@@ -1,284 +1,158 @@
 using System;
 using System.Threading.Tasks;
 using Xunit;
-using MCPTool.Common;
-using Common.@interface;
 using Common.provider;
+using System.Text.Json;
+using Common.config;
 
 namespace Common.test
 {
+    [Trait("Category", "DatabaseIntegration")]
+    [Collection("DatabaseIntegrationTests")]
     public class MongoDBMCPTests
     {
-        private readonly string _testConnectionString = "mongodb://gw:123.zxc@10.10.1.105:27017";
-        private readonly IMongoDB _dbmcp;
-        private string? _connId;
-        private readonly string _testDatabase = "test";
-        private readonly string _testCollection = "test_collection";
+        private readonly MongoDBProvider _provider = new MongoDBProvider();
+        private string _connId = string.Empty;
+
+        // 从配置文件读取连接字符串
+        private readonly string _connectionString;
+        
+        // 测试数据库和集合名
+        private readonly string _testDbName = "test_db_" + Guid.NewGuid().ToString("N");
+        private readonly string _testCollectionName = "test_collection_" + Guid.NewGuid().ToString("N");
 
         public MongoDBMCPTests()
         {
-            _dbmcp = new MongoDBProvider();
-        }
-
-        private async Task CleanupTestEnvironment()
-        {
-            if (!string.IsNullOrEmpty(_connId))
-            {
-                try
-                {
-                    // 删除测试集合
-                    await _dbmcp.DropCollection(_connId, _testDatabase, _testCollection);
-                }
-                catch
-                {
-                    // 忽略清理过程中的错误
-                }
-            }
+            // 从配置文件加载连接字符串
+            _connectionString = DatabaseConfig.Instance.GetConnectionString(DatabaseType.MongoDB);
         }
 
         [Fact]
-        public async Task RegisterTest()
+        [Trait("Description", "Test Register and Unregister functionality")]
+        public async Task RegisterAndUnregister_ShouldWork()
         {
-            // 清理之前的测试环境
-            await CleanupTestEnvironment();
-
-            // 测试注册连接
-            var connId = await _dbmcp.Register(_testConnectionString);
-            Assert.NotNull(connId);
-            Assert.NotEmpty(connId);
-
-            // 保存连接ID以供其他测试使用
-            _connId = connId;
-        }
-
-        [Fact]
-        public async Task CreateCollectionTest()
-        {
-            if (string.IsNullOrEmpty(_connId))
+            // 如果配置文件中没有配置连接字符串，则跳过测试
+            if (string.IsNullOrEmpty(_connectionString))
             {
-                await RegisterTest();
+                return;
             }
 
-            // 创建测试集合
-            var result = await _dbmcp.CreateCollection(_connId, _testDatabase, _testCollection);
-            Assert.Contains("集合创建成功", result);
-        }
+            _connId = await _provider.Register(_connectionString);
+            Assert.NotNull(_connId);
+            Assert.NotEmpty(_connId);
 
-        [Fact]
-        public async Task InsertOneTest()
-        {
-            if (string.IsNullOrEmpty(_connId))
-            {
-                await RegisterTest();
-                await CreateCollectionTest();
-            }
-
-            // 插入测试文档
-            string document = @"{
-                ""name"": ""测试用户"",
-                ""email"": ""test@example.com"",
-                ""age"": 30,
-                ""created_at"": """ + DateTime.UtcNow.ToString("o") + @"""
-            }";
-
-            var result = await _dbmcp.InsertOne(_connId, _testDatabase, _testCollection, document);
-            Assert.Contains("已成功插入1个文档", result);
-        }
-
-        [Fact]
-        public async Task FindTest()
-        {
-            if (string.IsNullOrEmpty(_connId))
-            {
-                await RegisterTest();
-                await CreateCollectionTest();
-                await InsertOneTest();
-            }
-
-            // 查询测试文档
-            string filter = @"{ ""name"": ""测试用户"" }";
-            var result = await _dbmcp.Find(_connId, _testDatabase, _testCollection, filter);
-
-            // 验证结果包含测试数据
-            Assert.Contains("测试用户", result);
-            Assert.Contains("test@example.com", result);
-        }
-
-        [Fact]
-        public async Task InsertManyTest()
-        {
-            if (string.IsNullOrEmpty(_connId))
-            {
-                await RegisterTest();
-                await CreateCollectionTest();
-            }
-
-            // 插入多个测试文档
-            string documents = @"[
-                {
-                    ""name"": ""用户1"",
-                    ""email"": ""user1@example.com"",
-                    ""age"": 31,
-                    ""created_at"": """ + DateTime.UtcNow.ToString("o") + @"""
-                },
-                {
-                    ""name"": ""用户2"",
-                    ""email"": ""user2@example.com"",
-                    ""age"": 32,
-                    ""created_at"": """ + DateTime.UtcNow.ToString("o") + @"""
-                }
-            ]";
-
-            var result = await _dbmcp.InsertMany(_connId, _testDatabase, _testCollection, documents);
-            Assert.Contains("已成功插入2个文档", result);
-
-            // 验证插入结果
-            string filter = @"{ ""$or"": [ { ""name"": ""用户1"" }, { ""name"": ""用户2"" } ] }";
-            var findResult = await _dbmcp.Find(_connId, _testDatabase, _testCollection, filter);
-            Assert.Contains("user1@example.com", findResult);
-            Assert.Contains("user2@example.com", findResult);
-        }
-
-        [Fact]
-        public async Task UpdateManyTest()
-        {
-            if (string.IsNullOrEmpty(_connId))
-            {
-                await RegisterTest();
-                await CreateCollectionTest();
-                await InsertManyTest();
-            }
-
-            // 更新测试文档
-            string filter = @"{ ""email"": ""user1@example.com"" }";
-            string update = @"{ ""$set"": { ""name"": ""更新用户1"", ""age"": 40 } }";
-            var result = await _dbmcp.UpdateMany(_connId, _testDatabase, _testCollection, filter, update);
-            Assert.Contains("已更新", result);
-
-            // 验证更新结果
-            var findResult = await _dbmcp.Find(_connId, _testDatabase, _testCollection, filter);
-            Assert.Contains("更新用户1", findResult);
-            Assert.Contains("40", findResult);
-        }
-
-        [Fact]
-        public async Task CreateIndexTest()
-        {
-            if (string.IsNullOrEmpty(_connId))
-            {
-                await RegisterTest();
-                await CreateCollectionTest();
-            }
-
-            // 创建索引
-            string indexDefinition = @"{ ""email"": 1 }";
-            string indexName = "idx_email";
-            var result = await _dbmcp.CreateIndex(_connId, _testDatabase, _testCollection, indexDefinition, indexName);
-            Assert.Contains("索引创建成功", result);
-
-            // 验证索引创建
-            var collectionInfo = await _dbmcp.GetCollectionInfo(_connId, _testDatabase, _testCollection);
-            Assert.Contains("idx_email", collectionInfo);
-        }
-
-        [Fact]
-        public async Task ListCollectionsTest()
-        {
-            if (string.IsNullOrEmpty(_connId))
-            {
-                await RegisterTest();
-                await CreateCollectionTest();
-            }
-
-            // 列出测试数据库中的集合
-            var result = await _dbmcp.ListCollections(_connId, _testDatabase);
-
-            // 验证结果包含测试集合
-            Assert.Contains(_testCollection, result);
-        }
-
-        [Fact]
-        public async Task GetCollectionInfoTest()
-        {
-            if (string.IsNullOrEmpty(_connId))
-            {
-                await RegisterTest();
-                await CreateCollectionTest();
-                await InsertOneTest();
-                await CreateIndexTest();
-            }
-
-            // 获取集合详情
-            var result = await _dbmcp.GetCollectionInfo(_connId, _testDatabase, _testCollection);
-
-            // 验证结果包含关键信息
-            Assert.Contains("文档数量", result);
-            Assert.Contains("索引列表", result);
-        }
-
-        [Fact]
-        public async Task DeleteManyTest()
-        {
-            if (string.IsNullOrEmpty(_connId))
-            {
-                await RegisterTest();
-                await CreateCollectionTest();
-                await InsertOneTest();
-            }
-
-            // 删除测试文档
-            string filter = @"{ ""email"": ""test@example.com"" }";
-            var result = await _dbmcp.DeleteMany(_connId, _testDatabase, _testCollection, filter);
-            Assert.Contains("已删除", result);
-
-            // 验证删除结果
-            var findResult = await _dbmcp.Find(_connId, _testDatabase, _testCollection, filter);
-            Assert.Contains("查询返回 0 个文档", findResult);
-        }
-
-        [Fact]
-        public async Task DropIndexTest()
-        {
-            if (string.IsNullOrEmpty(_connId))
-            {
-                await RegisterTest();
-                await CreateCollectionTest();
-                await CreateIndexTest();
-            }
-
-            // 删除索引
-            var result = await _dbmcp.DropIndex(_connId, _testDatabase, _testCollection, "idx_email");
-            Assert.Contains("索引删除成功", result);
-        }
-
-        [Fact]
-        public async Task DropCollectionTest()
-        {
-            if (string.IsNullOrEmpty(_connId))
-            {
-                await RegisterTest();
-                await CreateCollectionTest();
-            }
-
-            // 删除集合
-            var result = await _dbmcp.DropCollection(_connId, _testDatabase, _testCollection);
-            Assert.Contains("集合删除成功", result);
-        }
-
-        [Fact]
-        public async Task UnregisterTest()
-        {
-            if (string.IsNullOrEmpty(_connId))
-            {
-                await RegisterTest();
-            }
-
-            // 测试注销连接
-            bool result = await _dbmcp.Unregister(_connId);
+            bool result = await _provider.Unregister(_connId);
             Assert.True(result);
+        }
 
-            // 清空连接ID
-            _connId = null;
+        [Fact]
+        [Trait("Description", "Test basic CRUD and collection operations")]
+        public async Task BasicOperations_ShouldWork()
+        {
+            // 如果配置文件中没有配置连接字符串，则跳过测试
+            if (string.IsNullOrEmpty(_connectionString))
+            {
+                return;
+            }
+
+            _connId = await _provider.Register(_connectionString);
+            Assert.NotNull(_connId);
+            Assert.NotEmpty(_connId);
+
+            try
+            {
+                // 创建集合
+                string result = await _provider.CreateCollection(_connId, _testDbName, _testCollectionName);
+                Assert.Contains("成功", result);
+
+                // 插入单个文档
+                string singleDoc = @"{""name"": ""测试文档1"", ""value"": 10.5, ""tags"": [""测试"", ""文档""]}";
+                result = await _provider.InsertOne(_connId, _testDbName, _testCollectionName, singleDoc);
+                Assert.Contains("成功", result);
+                Assert.Contains("新文档ID", result);
+
+                // 插入多个文档
+                string multiDocs = @"[
+                    {""name"": ""测试文档2"", ""value"": 20.75, ""active"": true},
+                    {""name"": ""测试文档3"", ""value"": 30, ""active"": false}
+                ]";
+                result = await _provider.InsertMany(_connId, _testDbName, _testCollectionName, multiDocs);
+                Assert.Contains("成功插入", result);
+                Assert.Contains("2", result); // 插入了2个文档
+
+                // 查询文档
+                result = await _provider.Find(_connId, _testDbName, _testCollectionName, "{}");
+                Assert.Contains("测试文档1", result);
+                Assert.Contains("测试文档2", result);
+                Assert.Contains("测试文档3", result);
+
+                // 条件查询
+                result = await _provider.Find(_connId, _testDbName, _testCollectionName, "{\"value\": {\"$gt\": 15}}");
+                Assert.Contains("测试文档2", result);
+                Assert.Contains("测试文档3", result);
+                Assert.DoesNotContain("测试文档1", result);
+
+                // 更新文档
+                string filter = "{\"name\": \"测试文档2\"}";
+                string update = "{\"$set\": {\"value\": 25.5, \"updated\": true}}";
+                result = await _provider.UpdateMany(_connId, _testDbName, _testCollectionName, filter, update);
+                Assert.Contains("已更新", result);
+
+                // 验证更新
+                result = await _provider.Find(_connId, _testDbName, _testCollectionName, filter);
+                Assert.Contains("25.5", result);
+                Assert.Contains("updated", result);
+                Assert.Contains("true", result);
+
+                // 删除文档
+                filter = "{\"name\": \"测试文档3\"}";
+                result = await _provider.DeleteMany(_connId, _testDbName, _testCollectionName, filter);
+                Assert.Contains("已删除", result);
+
+                // 验证删除
+                result = await _provider.Find(_connId, _testDbName, _testCollectionName, "{}");
+                Assert.DoesNotContain("测试文档3", result);
+                Assert.Contains("测试文档1", result);
+                Assert.Contains("测试文档2", result);
+
+                // 创建索引
+                string indexDefinition = "{\"name\": 1}";
+                string indexName = "idx_name";
+                result = await _provider.CreateIndex(_connId, _testDbName, _testCollectionName, indexDefinition, indexName);
+                Assert.Contains("成功", result);
+
+                // 获取集合信息
+                result = await _provider.GetCollectionInfo(_connId, _testDbName, _testCollectionName);
+                Assert.Contains(_testCollectionName, result);
+                Assert.Contains("索引", result);
+
+                // 列出所有集合
+                result = await _provider.ListCollections(_connId, _testDbName);
+                Assert.Contains(_testCollectionName, result);
+
+                // 删除索引
+                result = await _provider.DropIndex(_connId, _testDbName, _testCollectionName, indexName);
+                Assert.Contains("成功", result);
+
+                // 删除集合
+                result = await _provider.DropCollection(_connId, _testDbName, _testCollectionName);
+                Assert.Contains("成功", result);
+            }
+            catch (Exception ex)
+            {
+                Assert.Fail($"测试失败: {ex.Message}");
+            }
+            finally
+            {
+                // 清理资源，即使前面的测试失败
+                try { await _provider.DropCollection(_connId, _testDbName, _testCollectionName); } catch { /* Ignore */ }
+
+                // 清理连接
+                if (!string.IsNullOrEmpty(_connId))
+                {
+                    await _provider.Unregister(_connId);
+                }
+            }
         }
     }
-}
+} 

@@ -5,10 +5,16 @@ using System.Threading.Tasks;
 namespace Common.@interface
 {
     /// <summary>
-    /// DBMCP接口定义，用于规范DB行为
+    /// 关系型数据库接口定义，用于规范SQL DB行为
     /// </summary>
-    public interface IPostgreSQL
+    public interface IRelationalDB
     {
+        /// <summary>
+        /// 注册新的数据库连接，使用配置文件中的连接字符串
+        /// </summary>
+        /// <returns>连接ID</returns>
+        Task<string> Register();
+
         /// <summary>
         /// 注册新的数据库连接
         /// </summary>
@@ -118,5 +124,21 @@ namespace Common.@interface
         /// <param name="schemaName">Schema名</param>
         /// <returns>创建结果</returns>
         Task<string> CreateSchema(string connId, string schemaName);
+
+        /// <summary>
+        /// 删除Schema
+        /// </summary>
+        /// <param name="connId">连接ID</param>
+        /// <param name="schemaName">Schema名称或DROP SCHEMA语句</param>
+        /// <returns>删除结果</returns>
+        Task<string> DropSchema(string connId, string schemaName);
+
+        /// <summary>
+        /// 删除类型
+        /// </summary>
+        /// <param name="connId">连接ID</param>
+        /// <param name="typeName">类型名称或DROP TYPE语句</param>
+        /// <returns>删除结果</returns>
+        Task<string> DropType(string connId, string typeName);
     }
-}
+} 

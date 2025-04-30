@@ -10,6 +10,12 @@ namespace Common.@interface
     public interface IMongoDB
     {
         /// <summary>
+        /// 注册新的MongoDB连接，使用配置文件中的连接字符串
+        /// </summary>
+        /// <returns>连接ID</returns>
+        Task<string> Register();
+
+        /// <summary>
         /// 注册新的MongoDB连接
         /// </summary>
         /// <param name="connStr">连接字符串</param>

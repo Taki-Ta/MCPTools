@@ -9,6 +9,7 @@ using MongoDB.Bson.Serialization;
 using MongoDB.Driver;
 using System.Linq;
 using Common.@interface;
+using Common.config;
 
 namespace Common.provider
 {
@@ -18,6 +19,20 @@ namespace Common.provider
     public class MongoDBProvider : IMongoDB
     {
         private readonly ConcurrentDictionary<string, MongoClient> _connections = new();
+
+        /// <summary>
+        /// 注册新的MongoDB连接，使用配置文件中的连接字符串
+        /// </summary>
+        /// <returns>连接ID</returns>
+        public async Task<string> Register()
+        {
+            string connStr = DatabaseConfig.Instance.GetConnectionString(DatabaseType.MongoDB);
+            if (string.IsNullOrEmpty(connStr))
+            {
+                throw new Exception("MongoDB连接字符串未配置");
+            }
+            return await Register(connStr);
+        }
 
         /// <summary>
         /// 注册新的MongoDB连接

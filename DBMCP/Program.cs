@@ -22,10 +22,6 @@ builder.Services
     .WithStdioServerTransport() // 使用标准IO通信
     .WithToolsFromAssembly(); // 从程序集中注册所有工具
 
-// 注册Postgre实现
-builder.Services.AddSingleton<IPostgreSQL, PostgreSQLProvider>();
-// 注册MongoDB实现
-builder.Services.AddSingleton<IMongoDB, MongoDBProvider>();
 
 // 构建并运行应用程序
 var app = builder.Build();
