@@ -2,18 +2,20 @@ using System;
 using System.Threading.Tasks;
 using Xunit;
 using MCPTool.Common;
+using Common.@interface;
+using Common.provider;
 
-namespace DBMCPTests
+namespace Common.test
 {
-    public class PostgresDBMCPTests
+    public class PostgreSQLTests
     {
         private readonly string _testConnectionString = "Host=localhost;Port=5432;Database=taki;Username=postgres;Password=postgres";
-        private IDBMCP _dbmcp;
+        private IPostgreSQL _dbProvider;
         private string? _connId;
 
-        public PostgresDBMCPTests()
+        public PostgreSQLTests()
         {
-            _dbmcp = new PostgresDBMCP();
+            _dbProvider = new PostgreSQLProvider();
         }
 
         private async Task CleanupTestEnvironment()
@@ -23,11 +25,11 @@ namespace DBMCPTests
                 try
                 {
                     // 尝试删除测试表（如果存在）
-                    await _dbmcp.DropTable(_connId, "test_schema.test_table");
-                    
+                    await _dbProvider.DropTable(_connId, "test_schema.test_table");
+
                     // 删除测试schema
                     var dropSchemaSql = "DROP SCHEMA IF EXISTS test_schema CASCADE;";
-                    await _dbmcp.Query(_connId, dropSchemaSql);
+                    await _dbProvider.Query(_connId, dropSchemaSql);
                 }
                 catch
                 {
@@ -41,9 +43,9 @@ namespace DBMCPTests
         {
             // 清理之前的测试环境
             await CleanupTestEnvironment();
-            
+
             // 测试注册连接
-            var connId = await _dbmcp.Register(_testConnectionString);
+            var connId = await _dbProvider.Register(_testConnectionString);
             Assert.NotNull(connId);
             Assert.NotEmpty(connId);
 
@@ -60,7 +62,7 @@ namespace DBMCPTests
             }
 
             // 创建测试schema
-            var result = await _dbmcp.CreateSchema(_connId, "test_schema");
+            var result = await _dbProvider.CreateSchema(_connId, "test_schema");
             Assert.Contains("Schema创建成功", result);
         }
 
@@ -76,7 +78,7 @@ namespace DBMCPTests
             // 首先尝试删除表（如果存在）
             try
             {
-                await _dbmcp.DropTable(_connId, "test_schema.test_table");
+                await _dbProvider.DropTable(_connId, "test_schema.test_table");
             }
             catch
             {
@@ -92,7 +94,7 @@ namespace DBMCPTests
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )";
 
-            var result = await _dbmcp.CreateTable(_connId, createTableSql);
+            var result = await _dbProvider.CreateTable(_connId, createTableSql);
             Assert.Contains("表创建成功", result);
         }
 
@@ -108,7 +110,7 @@ namespace DBMCPTests
 
             // 插入测试数据
             var insertSql = "INSERT INTO test_schema.test_table (name, email) VALUES ('测试用户', 'test@example.com')";
-            var result = await _dbmcp.Insert(_connId, insertSql);
+            var result = await _dbProvider.Insert(_connId, insertSql);
             Assert.Contains("已插入 1 行", result);
         }
 
@@ -125,8 +127,8 @@ namespace DBMCPTests
 
             // 查询测试数据
             var querySql = "SELECT * FROM test_schema.test_table";
-            var result = await _dbmcp.Query(_connId, querySql);
-            
+            var result = await _dbProvider.Query(_connId, querySql);
+
             // 验证结果包含测试数据
             Assert.Contains("测试用户", result);
             Assert.Contains("test@example.com", result);
@@ -145,12 +147,12 @@ namespace DBMCPTests
 
             // 更新测试数据
             var updateSql = "UPDATE test_schema.test_table SET name = '更新用户' WHERE email = 'test@example.com'";
-            var result = await _dbmcp.Update(_connId, updateSql);
+            var result = await _dbProvider.Update(_connId, updateSql);
             Assert.Contains("已更新", result);
 
             // 验证更新结果
             var querySql = "SELECT * FROM test_schema.test_table WHERE email = 'test@example.com'";
-            var queryResult = await _dbmcp.Query(_connId, querySql);
+            var queryResult = await _dbProvider.Query(_connId, querySql);
             Assert.Contains("更新用户", queryResult);
         }
 
@@ -167,7 +169,7 @@ namespace DBMCPTests
             // 尝试先删除索引（如果存在）
             try
             {
-                await _dbmcp.DropIndex(_connId, "test_schema.idx_test_name");
+                await _dbProvider.DropIndex(_connId, "test_schema.idx_test_name");
             }
             catch
             {
@@ -176,7 +178,7 @@ namespace DBMCPTests
 
             // 创建索引
             var createIndexSql = "CREATE INDEX idx_test_name ON test_schema.test_table (name)";
-            var result = await _dbmcp.CreateIndex(_connId, createIndexSql);
+            var result = await _dbProvider.CreateIndex(_connId, createIndexSql);
             Assert.Contains("索引创建成功", result);
         }
 
@@ -191,8 +193,8 @@ namespace DBMCPTests
             }
 
             // 描述表结构
-            var result = await _dbmcp.Describe(_connId, "test_schema.test_table");
-            
+            var result = await _dbProvider.Describe(_connId, "test_schema.test_table");
+
             // 验证结果包含表字段
             Assert.Contains("id", result);
             Assert.Contains("name", result);
@@ -211,8 +213,8 @@ namespace DBMCPTests
             }
 
             // 列出测试schema中的表
-            var result = await _dbmcp.ListTables(_connId, "test_schema");
-            
+            var result = await _dbProvider.ListTables(_connId, "test_schema");
+
             // 验证结果包含测试表
             Assert.Contains("test_table", result);
         }
@@ -230,12 +232,12 @@ namespace DBMCPTests
 
             // 删除测试数据
             var deleteSql = "DELETE FROM test_schema.test_table WHERE email = 'test@example.com'";
-            var result = await _dbmcp.Delete(_connId, deleteSql);
+            var result = await _dbProvider.Delete(_connId, deleteSql);
             Assert.Contains("已删除", result);
 
             // 验证删除结果
             var querySql = "SELECT * FROM test_schema.test_table WHERE email = 'test@example.com'";
-            var queryResult = await _dbmcp.Query(_connId, querySql);
+            var queryResult = await _dbProvider.Query(_connId, querySql);
             Assert.Contains("查询返回 0 行", queryResult);
         }
 
@@ -251,7 +253,7 @@ namespace DBMCPTests
             }
 
             // 删除索引
-            var result = await _dbmcp.DropIndex(_connId, "test_schema.idx_test_name");
+            var result = await _dbProvider.DropIndex(_connId, "test_schema.idx_test_name");
             Assert.Contains("索引删除成功", result);
         }
 
@@ -266,7 +268,7 @@ namespace DBMCPTests
             }
 
             // 删除测试表
-            var result = await _dbmcp.DropTable(_connId, "test_schema.test_table");
+            var result = await _dbProvider.DropTable(_connId, "test_schema.test_table");
             Assert.Contains("表删除成功", result);
         }
 
@@ -282,8 +284,8 @@ namespace DBMCPTests
             await CleanupTestEnvironment();
 
             // 注销连接
-            var result = await _dbmcp.Unregister(_connId);
+            var result = await _dbProvider.Unregister(_connId);
             Assert.True(result);
         }
     }
-} 
+}

@@ -3,6 +3,8 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Server;
 using MCPTool.Common;
+using Common.@interface;
+using Common.provider;
 
 // 创建应用程序构建器
 var builder = Host.CreateEmptyApplicationBuilder(settings: null);
@@ -21,7 +23,7 @@ builder.Services
     .WithToolsFromAssembly(); // 从程序集中注册所有工具
 
 // 注册DBMCP实现
-builder.Services.AddSingleton<IDBMCP, PostgresDBMCP>();
+builder.Services.AddSingleton<IPostgreSQL, PostgreSQLProvider>();
 
 // 构建并运行应用程序
 var app = builder.Build();

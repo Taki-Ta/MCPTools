@@ -8,13 +8,14 @@ using System.Threading.Tasks;
 using Npgsql;
 using SQLParser;
 using SQLParser.Parsers.TSql;
+using Common.@interface;
 
-namespace MCPTool.Common
+namespace Common.provider
 {
     /// <summary>
     /// PostgreSQL的DBMCP实现
     /// </summary>
-    public class PostgreSQLProvider : IDBMCP
+    public class PostgreSQLProvider : IPostgreSQL
     {
         private readonly ConcurrentDictionary<string, NpgsqlDataSource> _connections = new();
 
@@ -82,7 +83,7 @@ namespace MCPTool.Common
             using var connection = await dataSource.OpenConnectionAsync();
             using var command = new NpgsqlCommand(querySql, connection);
             using var reader = await command.ExecuteReaderAsync();
-            
+
             return await FormatQueryResult(reader);
         }
 
@@ -104,7 +105,7 @@ namespace MCPTool.Common
             using var connection = await dataSource.OpenConnectionAsync();
             using var command = new NpgsqlCommand(insertSql, connection);
             int rowsAffected = await command.ExecuteNonQueryAsync();
-            
+
             return $"已插入 {rowsAffected} 行";
         }
 
@@ -126,7 +127,7 @@ namespace MCPTool.Common
             using var connection = await dataSource.OpenConnectionAsync();
             using var command = new NpgsqlCommand(updateSql, connection);
             int rowsAffected = await command.ExecuteNonQueryAsync();
-            
+
             return $"已更新 {rowsAffected} 行";
         }
 
@@ -148,7 +149,7 @@ namespace MCPTool.Common
             using var connection = await dataSource.OpenConnectionAsync();
             using var command = new NpgsqlCommand(deleteSql, connection);
             int rowsAffected = await command.ExecuteNonQueryAsync();
-            
+
             return $"已删除 {rowsAffected} 行";
         }
 
@@ -194,7 +195,7 @@ ORDER BY
             using var command = new NpgsqlCommand(sql, connection);
             command.Parameters.AddWithValue("schema", schemaName);
             command.Parameters.AddWithValue("table", tableNameOnly);
-            
+
             using var reader = await command.ExecuteReaderAsync();
             return await FormatQueryResult(reader);
         }
@@ -219,10 +220,10 @@ ORDER BY
                 using var connection = await dataSource.OpenConnectionAsync();
                 using var command = new NpgsqlCommand(createSql, connection);
                 await command.ExecuteNonQueryAsync();
-                
+
                 return "表创建成功";
             }
-            catch (Npgsql.PostgresException ex) when (ex.SqlState == "42P07") // 42P07 是"表已存在"的错误代码
+            catch (PostgresException ex) when (ex.SqlState == "42P07") // 42P07 是"表已存在"的错误代码
             {
                 // 表已存在，视为成功
                 return "表创建成功（表已存在）";
@@ -246,7 +247,7 @@ ORDER BY
             using var connection = await dataSource.OpenConnectionAsync();
             using var command = new NpgsqlCommand(sql, connection);
             await command.ExecuteNonQueryAsync();
-            
+
             return "表删除成功";
         }
 
@@ -265,15 +266,15 @@ ORDER BY
                 throw new Exception($"连接ID {connId} 不存在");
             }
 
-            try 
+            try
             {
                 using var connection = await dataSource.OpenConnectionAsync();
                 using var command = new NpgsqlCommand(createIndexSql, connection);
                 await command.ExecuteNonQueryAsync();
-                
+
                 return "索引创建成功";
             }
-            catch (Npgsql.PostgresException ex) when (ex.SqlState == "42P07") // 索引已存在
+            catch (PostgresException ex) when (ex.SqlState == "42P07") // 索引已存在
             {
                 // 索引已存在，视为成功
                 return "索引创建成功（索引已存在）";
@@ -297,7 +298,7 @@ ORDER BY
             using var connection = await dataSource.OpenConnectionAsync();
             using var command = new NpgsqlCommand(sql, connection);
             await command.ExecuteNonQueryAsync();
-            
+
             return "索引删除成功";
         }
 
@@ -328,7 +329,7 @@ ORDER BY
             using var connection = await dataSource.OpenConnectionAsync();
             using var command = new NpgsqlCommand(sql, connection);
             command.Parameters.AddWithValue("schema", schema);
-            
+
             using var reader = await command.ExecuteReaderAsync();
             return await FormatQueryResult(reader);
         }
@@ -351,7 +352,7 @@ ORDER BY
             using var connection = await dataSource.OpenConnectionAsync();
             using var command = new NpgsqlCommand(createTypeSql, connection);
             await command.ExecuteNonQueryAsync();
-            
+
             return "类型创建成功";
         }
 
@@ -372,7 +373,7 @@ ORDER BY
             using var connection = await dataSource.OpenConnectionAsync();
             using var command = new NpgsqlCommand(sql, connection);
             await command.ExecuteNonQueryAsync();
-            
+
             return "Schema创建成功";
         }
 
@@ -386,7 +387,7 @@ ORDER BY
             try
             {
                 bool isValid = false;
-                
+
                 // 使用SQLParser库验证SQL类型
                 if (expectedType == "SELECT")
                 {
@@ -416,7 +417,7 @@ ORDER BY
                 {
                     isValid = IsCreateTypeStatement(sql);
                 }
-                
+
                 if (!isValid)
                 {
                     throw new Exception($"无效的{expectedType}语句");
@@ -504,20 +505,20 @@ ORDER BY
         private async Task<string> FormatQueryResult(NpgsqlDataReader reader)
         {
             var result = new StringBuilder();
-            
+
             // 获取列名
             var columns = new List<string>();
             for (int i = 0; i < reader.FieldCount; i++)
             {
                 columns.Add(reader.GetName(i));
             }
-            
+
             // 添加表头
             result.AppendLine(string.Join("\t", columns));
-            
+
             // 添加分隔线
             result.AppendLine(new string('-', columns.Sum(c => c.Length) + columns.Count * 3));
-            
+
             // 添加数据行
             var rows = new List<List<string>>();
             while (await reader.ReadAsync())
@@ -529,14 +530,14 @@ ORDER BY
                 }
                 rows.Add(row);
             }
-            
+
             foreach (var row in rows)
             {
                 result.AppendLine(string.Join("\t", row));
             }
-            
+
             result.AppendLine($"查询返回 {rows.Count} 行");
-            
+
             return result.ToString();
         }
     }
@@ -596,4 +597,4 @@ ORDER BY
             base.EnterCreate_type(context);
         }
     }
-} 
+}

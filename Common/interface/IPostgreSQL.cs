@@ -2,12 +2,12 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 
-namespace MCPTool.Common
+namespace Common.@interface
 {
     /// <summary>
     /// DBMCP接口定义，用于规范DB行为
     /// </summary>
-    public interface IDBMCP
+    public interface IPostgreSQL
     {
         /// <summary>
         /// 注册新的数据库连接
@@ -119,4 +119,4 @@ namespace MCPTool.Common
         /// <returns>创建结果</returns>
         Task<string> CreateSchema(string connId, string schemaName);
     }
-} 
+}
